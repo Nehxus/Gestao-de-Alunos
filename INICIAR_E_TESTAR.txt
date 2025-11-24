@@ -1,0 +1,30 @@
+==========================================
+  COMO TESTAR A APLICAÇÃO NO SWAGGER
+==========================================
+
+1. INICIAR A APLICAÇÃO:
+   cd /home/nba_rudeboybr/Documentos/SAMUEL/gestao-alunos
+   mvn spring-boot:run
+
+2. AGUARDAR A INICIALIZAÇÃO:
+   Aguarde até ver: "Started GestaoAlunosApplication"
+
+3. ACESSAR O SWAGGER:
+   Abra o navegador em: http://localhost:8080/swagger-ui.html
+
+4. TESTAR:
+   - Primeiro crie um CURSO (POST /api/cursos)
+   - Depois crie um ALUNO (POST /api/alunos)
+   - Teste os outros endpoints
+
+5. PARAR A APLICAÇÃO:
+   Pressione Ctrl+C no terminal
+
+==========================================
+  DOCUMENTAÇÃO COMPLETA:
+==========================================
+- TESTAR_SWAGGER.md - Guia completo passo a passo
+- SWAGGER_GUIDE.md - Referência de todos os endpoints
+- INICIAR_APLICACAO.md - Como iniciar a aplicação
+
+==========================================

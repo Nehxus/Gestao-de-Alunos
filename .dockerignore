@@ -1,0 +1,63 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README.md
+CHECKLIST_PROJETO.md
+COBERTURA_TESTES.md
+CORRECAO_ERRO.md
+ESTRUTURA.md
+INICIAR_APLICACAO.md
+SWAGGER_GUIDE.md
+SWAGGER_FUNCIONANDO.md
+TESTAR_SWAGGER.md
+TESTES.md
+INICIAR_E_TESTAR.txt
+
+# Build artifacts (will be built in Docker)
+target/
+*.jar
+*.war
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+.DS_Store
+
+# Scripts
+*.sh
+*.bat
+*.ps1
+instalar-java-maven.ps1
+
+# Docker (não excluir Dockerfile - ele é necessário!)
+.dockerignore
+docker-compose.yml
+
+# Environment
+.env
+.env.local
+
+# H2 Database files
+*.db
+*.mv.db
+*.trace.db
+
+# Test coverage
+jacoco.exec
+**/target/site/jacoco/
+
+# Maven wrapper (not needed, using maven image)
+.mvn/
+
+# Procfile (for Heroku, not needed for Docker)
+Procfile
+
