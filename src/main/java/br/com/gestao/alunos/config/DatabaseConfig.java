@@ -27,6 +27,22 @@ public class DatabaseConfig {
         String databaseUsername = System.getenv("DATABASE_USERNAME");
         String databasePassword = System.getenv("DATABASE_PASSWORD");
 
+        // Se DATABASE_URL está no formato postgres://, extrai username e password
+        if (databaseUrl != null && (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://"))) {
+            logger.info("DATABASE_URL detectada no formato postgres://, extraindo credenciais...");
+            String[] credentials = extractCredentialsFromUrl(databaseUrl);
+            if (credentials != null) {
+                if (databaseUsername == null || databaseUsername.isEmpty()) {
+                    databaseUsername = credentials[0];
+                    logger.info("Username extraído da DATABASE_URL");
+                }
+                if (databasePassword == null || databasePassword.isEmpty()) {
+                    databasePassword = credentials[1];
+                    logger.info("Password extraído da DATABASE_URL");
+                }
+            }
+        }
+
         String jdbcUrl = buildJdbcUrl(databaseUrl);
         
         logger.info("=== Configuração do Banco de Dados ===");
@@ -42,13 +58,13 @@ public class DatabaseConfig {
         }
 
         if (databaseUsername == null || databaseUsername.isEmpty()) {
-            String errorMsg = "DATABASE_USERNAME não configurada. Configure a variável de ambiente DATABASE_USERNAME no Render.";
+            String errorMsg = "DATABASE_USERNAME não configurada. Configure a variável de ambiente DATABASE_USERNAME no Render ou use DATABASE_URL no formato postgres://user:pass@host:port/db";
             logger.error(errorMsg);
             throw new RuntimeException(errorMsg);
         }
 
         if (databasePassword == null || databasePassword.isEmpty()) {
-            String errorMsg = "DATABASE_PASSWORD não configurada. Configure a variável de ambiente DATABASE_PASSWORD no Render.";
+            String errorMsg = "DATABASE_PASSWORD não configurada. Configure a variável de ambiente DATABASE_PASSWORD no Render ou use DATABASE_URL no formato postgres://user:pass@host:port/db";
             logger.error(errorMsg);
             throw new RuntimeException(errorMsg);
         }
@@ -84,6 +100,27 @@ public class DatabaseConfig {
         return databaseUrl;
     }
 
+    private String[] extractCredentialsFromUrl(String postgresUrl) {
+        try {
+            String url = postgresUrl.replace("postgres://", "http://")
+                    .replace("postgresql://", "http://");
+            URI dbUri = new URI(url);
+            
+            if (dbUri.getUserInfo() != null) {
+                String[] userInfo = dbUri.getUserInfo().split(":");
+                if (userInfo.length >= 2) {
+                    return new String[]{userInfo[0], userInfo[1]};
+                } else if (userInfo.length == 1) {
+                    return new String[]{userInfo[0], ""};
+                }
+            }
+            return null;
+        } catch (URISyntaxException e) {
+            logger.warn("Erro ao extrair credenciais da URL: {}", e.getMessage());
+            return null;
+        }
+    }
+
     private String convertPostgresUrl(String postgresUrl) {
         try {
             // Remove o prefixo postgres:// ou postgresql://
@@ -92,9 +129,6 @@ public class DatabaseConfig {
 
             URI dbUri = new URI(url);
 
-            String username = dbUri.getUserInfo() != null ? dbUri.getUserInfo().split(":")[0] : "";
-            String password = dbUri.getUserInfo() != null && dbUri.getUserInfo().split(":").length > 1
-                    ? dbUri.getUserInfo().split(":")[1] : "";
             String host = dbUri.getHost();
             int port = dbUri.getPort() > 0 ? dbUri.getPort() : 5432;
             String path = dbUri.getPath();
@@ -102,17 +136,6 @@ public class DatabaseConfig {
             // Remove a barra inicial do path
             if (path != null && path.startsWith("/")) {
                 path = path.substring(1);
-            }
-
-            // Se username/password não estão nas variáveis de ambiente, usa da URL
-            String envUsername = System.getenv("DATABASE_USERNAME");
-            String envPassword = System.getenv("DATABASE_PASSWORD");
-            
-            if ((envUsername == null || envUsername.isEmpty()) && !username.isEmpty()) {
-                System.setProperty("DATABASE_USERNAME", username);
-            }
-            if ((envPassword == null || envPassword.isEmpty()) && !password.isEmpty()) {
-                System.setProperty("DATABASE_PASSWORD", password);
             }
 
             String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, path);
