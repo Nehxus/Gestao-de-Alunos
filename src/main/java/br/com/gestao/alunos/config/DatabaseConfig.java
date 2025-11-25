@@ -31,16 +31,27 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
         Map<String, Object> props = new HashMap<>();
         
         // IMPORTANTE: Forçar uso do PostgreSQL e desabilitar H2 em produção
+        // Isso deve ser feito ANTES de qualquer auto-configuração do Spring Boot
         props.put("spring.datasource.driver-class-name", "org.postgresql.Driver");
         props.put("spring.h2.console.enabled", "false");
         props.put("spring.jpa.database-platform", "org.hibernate.dialect.PostgreSQLDialect");
+        // Garantir que o Spring Boot não tente usar H2 como fallback
+        props.put("spring.datasource.continue-on-error", "false");
         
         String databaseUrl = System.getenv("DATABASE_URL");
         
         // Se não tem DATABASE_URL, falha explicitamente (não usa H2 como fallback)
         if (databaseUrl == null || databaseUrl.isEmpty()) {
-            logger.error("DATABASE_URL não configurada. Configure a variável DATABASE_URL no Render.");
-            logger.error("A aplicação NÃO usará H2 em produção. Configure DATABASE_URL para continuar.");
+            logger.error("================================================");
+            logger.error("ERRO: DATABASE_URL não configurada no Render!");
+            logger.error("================================================");
+            logger.error("Para corrigir:");
+            logger.error("1. No Render Dashboard, vá em seu serviço Web");
+            logger.error("2. Vá em 'Environment'");
+            logger.error("3. Adicione a variável DATABASE_URL com o valor do seu banco PostgreSQL");
+            logger.error("   (Você encontra essa URL no dashboard do seu banco PostgreSQL no Render)");
+            logger.error("4. O formato deve ser: postgres://user:password@host:port/database");
+            logger.error("================================================");
             // Define uma URL inválida para forçar erro de PostgreSQL (não H2)
             // Isso garante que o Spring Boot não tente usar H2 como fallback
             props.put("spring.datasource.url", "jdbc:postgresql://localhost:5432/INVALID_DATABASE_URL_NOT_CONFIGURED");

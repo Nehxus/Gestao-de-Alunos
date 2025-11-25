@@ -115,6 +115,11 @@
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                         </exclude>
+                        <!-- Excluir H2 do JAR final - só usar em testes -->
+                        <exclude>
+                            <groupId>com.h2database</groupId>
+                            <artifactId>h2</artifactId>
+                        </exclude>
                     </excludes>
                 </configuration>
             </plugin>
