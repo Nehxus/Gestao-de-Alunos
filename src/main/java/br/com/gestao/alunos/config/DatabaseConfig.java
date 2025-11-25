@@ -47,6 +47,23 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
         
         String databaseUrl = System.getenv("DATABASE_URL");
         
+        // Log para debug - mostra se DATABASE_URL foi encontrada (sem mostrar a senha)
+        if (databaseUrl != null && !databaseUrl.isEmpty()) {
+            String maskedUrl = databaseUrl.replaceAll(":([^:@]+)@", ":****@");
+            logger.info("DATABASE_URL encontrada: {}", maskedUrl);
+        } else {
+            logger.warn("DATABASE_URL não encontrada nas variáveis de ambiente");
+            // Tenta também verificar outras variáveis comuns do Render
+            logger.info("Verificando outras variáveis de ambiente...");
+            String[] envVars = {"DATABASE_URL", "POSTGRES_URL", "POSTGRESQL_URL"};
+            for (String var : envVars) {
+                String value = System.getenv(var);
+                if (value != null) {
+                    logger.info("Variável {} encontrada", var);
+                }
+            }
+        }
+        
         // Se não tem DATABASE_URL, falha explicitamente (não usa H2 como fallback)
         if (databaseUrl == null || databaseUrl.isEmpty()) {
             logger.error("================================================");
@@ -88,26 +105,32 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
             return;
         }
         
-        // Se está no formato postgres://, converte para jdbc: e configura
+        // Se está no formato postgres:// ou postgresql://, converte para jdbc: e configura
         if (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://")) {
-            logger.info("Convertendo DATABASE_URL de postgres:// para formato JDBC...");
+            logger.info("Convertendo DATABASE_URL de postgresql:// para formato JDBC...");
             try {
                 String jdbcUrl = convertToJdbcUrl(databaseUrl);
                 String[] credentials = extractCredentials(databaseUrl);
+                
+                logger.info("JDBC URL gerada: jdbc:postgresql://{}:****/{}", 
+                    extractHost(databaseUrl), extractDatabase(databaseUrl));
                 
                 props.put("spring.datasource.url", jdbcUrl);
                 
                 if (credentials != null && credentials[0] != null) {
                     props.put("spring.datasource.username", credentials[0]);
+                    logger.info("Username configurado: {}", credentials[0]);
                 }
                 if (credentials != null && credentials.length > 1 && credentials[1] != null) {
                     props.put("spring.datasource.password", credentials[1]);
+                    logger.info("Password configurado (oculto)");
                 }
                 
                 env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
-                logger.info("DATABASE_URL convertida e configurada com sucesso - PostgreSQL será usado");
+                logger.info("✅ DATABASE_URL convertida e configurada com sucesso - PostgreSQL será usado");
             } catch (Exception e) {
-                logger.error("Erro ao converter DATABASE_URL: {}", e.getMessage(), e);
+                logger.error("❌ Erro ao converter DATABASE_URL: {}", e.getMessage(), e);
+                logger.error("URL original: {}", databaseUrl.replaceAll(":([^:@]+)@", ":****@"));
                 // Mesmo com erro, força PostgreSQL para evitar H2
                 env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
             }
@@ -152,6 +175,32 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
         } catch (URISyntaxException e) {
             logger.warn("Erro ao extrair credenciais da URL: {}", e.getMessage());
             return null;
+        }
+    }
+    
+    private String extractHost(String postgresUrl) {
+        try {
+            String url = postgresUrl.replace("postgres://", "http://")
+                    .replace("postgresql://", "http://");
+            URI dbUri = new URI(url);
+            return dbUri.getHost();
+        } catch (URISyntaxException e) {
+            return "unknown";
+        }
+    }
+    
+    private String extractDatabase(String postgresUrl) {
+        try {
+            String url = postgresUrl.replace("postgres://", "http://")
+                    .replace("postgresql://", "http://");
+            URI dbUri = new URI(url);
+            String path = dbUri.getPath();
+            if (path != null && path.startsWith("/")) {
+                return path.substring(1);
+            }
+            return path != null ? path : "unknown";
+        } catch (URISyntaxException e) {
+            return "unknown";
         }
     }
 }
