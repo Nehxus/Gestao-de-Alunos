@@ -362,36 +362,32 @@ O projeto implementa um tratamento centralizado de exceções utilizando `@RestC
 5. **Membro 5**: Testes unitários e integração
 6. **Membro 6**: Documentação e deploy
 
-## 🚀 Deploy em Produção
+## 🚀 Deploy no Render
 
-### Render
+### Passo a Passo Rápido
 
-1. Crie uma conta no [Render](https://render.com)
-2. Conecte seu repositório GitHub
-3. Crie um novo serviço Web
-4. Configure as variáveis de ambiente:
-   - `SPRING_PROFILES_ACTIVE=prod`
-   - `DATABASE_URL=jdbc:postgresql://...`
-   - `DATABASE_USERNAME=...`
-   - `DATABASE_PASSWORD=...`
-5. Configure o build command: `mvn clean install`
-6. Configure o start command: `java -jar target/gestao-alunos-1.0.0.jar`
+1. **Criar Banco PostgreSQL no Render:**
+   - "New +" > "PostgreSQL"
+   - Copie a **Internal Database URL** (formato: `postgres://user:pass@host:port/db`)
 
-### Heroku
+2. **Criar Web Service:**
+   - "New +" > "Web Service"
+   - Conecte ao repositório: `https://github.com/Nehxus/Gestao-de-Alunos`
+   - **Runtime**: `Java` (NÃO Docker!)
+   - **Build Command**: `mvn clean package -DskipTests`
+   - **Start Command**: `java -Dserver.port=$PORT -Dspring.profiles.active=prod -jar target/gestao-alunos-1.0.0.jar`
 
-1. Instale o [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli)
-2. Faça login: `heroku login`
-3. Crie a aplicação: `heroku create gestao-alunos`
-4. Adicione o addon PostgreSQL: `heroku addons:create heroku-postgresql:hobby-dev`
-5. Configure as variáveis de ambiente:
-   ```bash
-   heroku config:set SPRING_PROFILES_ACTIVE=prod
+3. **Variáveis de Ambiente:**
    ```
-6. Faça o deploy: `git push heroku main`
+   SPRING_PROFILES_ACTIVE = prod
+   DATABASE_URL = [cole a Internal Database URL completa aqui]
+   ```
+   
+   A aplicação extrai automaticamente username e password da URL!
 
-### Link da API em Produção
+4. **Deploy automático** após salvar as variáveis.
 
-**Link público**: [Adicione aqui o link da sua API em produção]
+📖 **Guia completo**: Veja `SOLUCAO_DEFINITIVA_DEPLOY.md` para detalhes.
 
 ## 📄 Licença
 
@@ -417,5 +413,6 @@ O checklist inclui:
 
 Para dúvidas ou sugestões, entre em contato através do email: contato@gestaoalunos.com
 
-#   G e s t - o - d e - A l u n o s  
+#   G e s t - o - d e - A l u n o s 
+ 
  
