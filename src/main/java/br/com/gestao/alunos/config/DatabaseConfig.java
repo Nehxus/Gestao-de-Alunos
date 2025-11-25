@@ -4,8 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
 import org.springframework.context.ApplicationListener;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 
@@ -18,9 +16,10 @@ import java.util.Map;
  * Configuração do banco de dados para produção.
  * Converte DATABASE_URL do formato postgres:// para jdbc:postgresql://
  * e injeta as propriedades no ambiente ANTES do Spring Boot fazer auto-configuração
+ * 
+ * IMPORTANTE: Esta classe deve ser registrada como listener no SpringApplication
+ * para garantir que seja executada antes da auto-configuração do DataSource.
  */
-@Configuration
-@Profile("prod")
 public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmentPreparedEvent> {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseConfig.class);
@@ -28,6 +27,31 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
         ConfigurableEnvironment env = event.getEnvironment();
+        
+        // Verificar se o perfil "prod" está ativo
+        String[] activeProfiles = env.getActiveProfiles();
+        boolean isProdProfile = false;
+        for (String profile : activeProfiles) {
+            if ("prod".equals(profile)) {
+                isProdProfile = true;
+                break;
+            }
+        }
+        
+        // Também verificar se o perfil será ativado via propriedade
+        String springProfilesActive = env.getProperty("spring.profiles.active");
+        if (springProfilesActive != null && springProfilesActive.contains("prod")) {
+            isProdProfile = true;
+        }
+        
+        // Se não é perfil prod, não faz nada (deixa o H2 funcionar em dev)
+        if (!isProdProfile) {
+            logger.debug("Perfil 'prod' não está ativo. DatabaseConfig não será aplicado.");
+            return;
+        }
+        
+        logger.info("🔧 DatabaseConfig: Configurando PostgreSQL para perfil 'prod'...");
+        
         Map<String, Object> props = new HashMap<>();
         
         // CRÍTICO: Desabilitar completamente a auto-configuração do H2
