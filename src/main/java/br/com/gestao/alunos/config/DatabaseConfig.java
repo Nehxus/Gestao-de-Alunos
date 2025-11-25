@@ -30,6 +30,11 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
         ConfigurableEnvironment env = event.getEnvironment();
         Map<String, Object> props = new HashMap<>();
         
+        // CRÍTICO: Desabilitar completamente a auto-configuração do H2
+        // Isso força o Spring Boot a usar apenas PostgreSQL
+        props.put("spring.autoconfigure.exclude", 
+            "org.springframework.boot.autoconfigure.h2.H2ConsoleAutoConfiguration");
+        
         // IMPORTANTE: Forçar uso do PostgreSQL e desabilitar H2 em produção
         // Isso deve ser feito ANTES de qualquer auto-configuração do Spring Boot
         props.put("spring.datasource.driver-class-name", "org.postgresql.Driver");
@@ -37,6 +42,8 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
         props.put("spring.jpa.database-platform", "org.hibernate.dialect.PostgreSQLDialect");
         // Garantir que o Spring Boot não tente usar H2 como fallback
         props.put("spring.datasource.continue-on-error", "false");
+        // Desabilitar auto-configuração de DataSource embutido
+        props.put("spring.datasource.embedded", "false");
         
         String databaseUrl = System.getenv("DATABASE_URL");
         
