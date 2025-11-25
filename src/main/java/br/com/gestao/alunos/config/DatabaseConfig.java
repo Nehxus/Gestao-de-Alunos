@@ -2,105 +2,80 @@ package br.com.gestao.alunos.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Bean;
+import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
-import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.MapPropertySource;
 
-import javax.sql.DataSource;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Configuração do banco de dados para produção.
  * Converte DATABASE_URL do formato postgres:// para jdbc:postgresql://
+ * e deixa Spring Boot fazer a auto-configuração automaticamente
  */
 @Configuration
 @Profile("prod")
-public class DatabaseConfig {
+public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmentPreparedEvent> {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseConfig.class);
 
-    @Bean
-    public DataSource dataSource() {
+    @Override
+    public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
         String databaseUrl = System.getenv("DATABASE_URL");
-        String databaseUsername = System.getenv("DATABASE_USERNAME");
-        String databasePassword = System.getenv("DATABASE_PASSWORD");
-
-        // Se DATABASE_URL está no formato postgres://, extrai username e password
-        if (databaseUrl != null && (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://"))) {
-            logger.info("DATABASE_URL detectada no formato postgres://, extraindo credenciais...");
-            String[] credentials = extractCredentialsFromUrl(databaseUrl);
-            if (credentials != null) {
-                if (databaseUsername == null || databaseUsername.isEmpty()) {
-                    databaseUsername = credentials[0];
-                    logger.info("Username extraído da DATABASE_URL");
+        
+        // Se não tem DATABASE_URL ou já está em formato JDBC, deixa Spring Boot fazer auto-configuração
+        if (databaseUrl == null || databaseUrl.isEmpty() || databaseUrl.startsWith("jdbc:")) {
+            logger.info("Usando auto-configuração padrão do Spring Boot");
+            return;
+        }
+        
+        // Se está no formato postgres://, converte para jdbc: e configura variáveis
+        if (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://")) {
+            logger.info("Convertendo DATABASE_URL de postgres:// para formato JDBC...");
+            try {
+                String jdbcUrl = convertToJdbcUrl(databaseUrl);
+                String[] credentials = extractCredentials(databaseUrl);
+                
+                ConfigurableEnvironment env = event.getEnvironment();
+                Map<String, Object> props = new HashMap<>();
+                props.put("spring.datasource.url", jdbcUrl);
+                
+                if (credentials != null) {
+                    props.put("spring.datasource.username", credentials[0]);
+                    props.put("spring.datasource.password", credentials[1]);
                 }
-                if (databasePassword == null || databasePassword.isEmpty()) {
-                    databasePassword = credentials[1];
-                    logger.info("Password extraído da DATABASE_URL");
-                }
+                
+                env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
+                logger.info("DATABASE_URL convertida e configurada para auto-configuração do Spring Boot");
+            } catch (Exception e) {
+                logger.error("Erro ao converter DATABASE_URL: {}", e.getMessage());
             }
         }
+    }
 
-        String jdbcUrl = buildJdbcUrl(databaseUrl);
+    private String convertToJdbcUrl(String postgresUrl) throws URISyntaxException {
+        String url = postgresUrl.replace("postgres://", "http://")
+                .replace("postgresql://", "http://");
+        URI dbUri = new URI(url);
         
-        logger.info("=== Configuração do Banco de Dados ===");
-        logger.info("DATABASE_URL (original): {}", databaseUrl != null ? maskUrl(databaseUrl) : "NÃO CONFIGURADA");
-        logger.info("JDBC URL (convertida): {}", maskUrl(jdbcUrl));
-        logger.info("DATABASE_USERNAME: {}", databaseUsername != null && !databaseUsername.isEmpty() ? "***" : "NÃO CONFIGURADO");
-        logger.info("DATABASE_PASSWORD: {}", databasePassword != null && !databasePassword.isEmpty() ? "***" : "NÃO CONFIGURADO");
-
-        if (jdbcUrl == null || jdbcUrl.isEmpty()) {
-            String errorMsg = "DATABASE_URL não configurada. Configure a variável de ambiente DATABASE_URL no Render.";
-            logger.error(errorMsg);
-            throw new RuntimeException(errorMsg);
+        String host = dbUri.getHost();
+        int port = dbUri.getPort() > 0 ? dbUri.getPort() : 5432;
+        String path = dbUri.getPath();
+        
+        if (path != null && path.startsWith("/")) {
+            path = path.substring(1);
         }
-
-        if (databaseUsername == null || databaseUsername.isEmpty()) {
-            String errorMsg = "DATABASE_USERNAME não configurada. Configure a variável de ambiente DATABASE_USERNAME no Render ou use DATABASE_URL no formato postgres://user:pass@host:port/db";
-            logger.error(errorMsg);
-            throw new RuntimeException(errorMsg);
-        }
-
-        if (databasePassword == null || databasePassword.isEmpty()) {
-            String errorMsg = "DATABASE_PASSWORD não configurada. Configure a variável de ambiente DATABASE_PASSWORD no Render ou use DATABASE_URL no formato postgres://user:pass@host:port/db";
-            logger.error(errorMsg);
-            throw new RuntimeException(errorMsg);
-        }
-
-        return DataSourceBuilder.create()
-                .url(jdbcUrl)
-                .username(databaseUsername)
-                .password(databasePassword)
-                .driverClassName("org.postgresql.Driver")
-                .build();
+        
+        return String.format("jdbc:postgresql://%s:%d/%s", host, port, path);
     }
 
-    private String buildJdbcUrl(String databaseUrl) {
-        // Se DATABASE_URL está vazia, tenta construir a partir de variáveis individuais
-        if (databaseUrl == null || databaseUrl.isEmpty()) {
-            logger.warn("DATABASE_URL não configurada, tentando construir a partir de variáveis individuais");
-            return buildFromIndividualVars();
-        }
-
-        // Se já está no formato jdbc:, retorna como está
-        if (databaseUrl.startsWith("jdbc:postgresql://")) {
-            logger.info("DATABASE_URL já está no formato JDBC");
-            return databaseUrl;
-        }
-
-        // Se está no formato postgres://, converte para jdbc:postgresql://
-        if (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://")) {
-            logger.info("Convertendo DATABASE_URL de postgres:// para jdbc:postgresql://");
-            return convertPostgresUrl(databaseUrl);
-        }
-
-        logger.warn("Formato de DATABASE_URL não reconhecido: {}", databaseUrl);
-        return databaseUrl;
-    }
-
-    private String[] extractCredentialsFromUrl(String postgresUrl) {
+    private String[] extractCredentials(String postgresUrl) {
         try {
             String url = postgresUrl.replace("postgres://", "http://")
                     .replace("postgresql://", "http://");
@@ -121,55 +96,4 @@ public class DatabaseConfig {
         }
     }
 
-    private String convertPostgresUrl(String postgresUrl) {
-        try {
-            // Remove o prefixo postgres:// ou postgresql://
-            String url = postgresUrl.replace("postgres://", "http://")
-                    .replace("postgresql://", "http://");
-
-            URI dbUri = new URI(url);
-
-            String host = dbUri.getHost();
-            int port = dbUri.getPort() > 0 ? dbUri.getPort() : 5432;
-            String path = dbUri.getPath();
-
-            // Remove a barra inicial do path
-            if (path != null && path.startsWith("/")) {
-                path = path.substring(1);
-            }
-
-            String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, path);
-            logger.info("URL convertida com sucesso");
-            return jdbcUrl;
-        } catch (URISyntaxException e) {
-            logger.error("Erro ao converter DATABASE_URL: {}", e.getMessage());
-            throw new RuntimeException("Erro ao processar DATABASE_URL: " + e.getMessage(), e);
-        }
-    }
-
-    private String buildFromIndividualVars() {
-        String host = System.getenv("DATABASE_HOST");
-        if (host == null || host.isEmpty()) {
-            host = "localhost";
-        }
-
-        String port = System.getenv("DATABASE_PORT");
-        if (port == null || port.isEmpty()) {
-            port = "5432";
-        }
-
-        String database = System.getenv("DATABASE_NAME");
-        if (database == null || database.isEmpty()) {
-            database = "gestaoalunos";
-        }
-
-        return String.format("jdbc:postgresql://%s:%s/%s", host, port, database);
-    }
-
-    private String maskUrl(String url) {
-        if (url == null) return "null";
-        // Mascara senha na URL se existir
-        return url.replaceAll("password=[^&;]*", "password=***")
-                  .replaceAll(":[^@]*@", ":***@");
-    }
 }
