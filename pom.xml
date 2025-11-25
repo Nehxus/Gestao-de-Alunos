@@ -47,11 +47,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         
-        <!-- H2 Database (Desenvolvimento) -->
+        <!-- H2 Database (Apenas para desenvolvimento local) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+            <!-- Excluir H2 quando o perfil prod estiver ativo -->
         </dependency>
         
         <!-- PostgreSQL (Produção) -->

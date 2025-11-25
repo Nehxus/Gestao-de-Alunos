@@ -27,19 +27,27 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
 
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
+        ConfigurableEnvironment env = event.getEnvironment();
+        Map<String, Object> props = new HashMap<>();
+        
+        // IMPORTANTE: Forçar uso do PostgreSQL e desabilitar H2 em produção
+        props.put("spring.datasource.driver-class-name", "org.postgresql.Driver");
+        props.put("spring.h2.console.enabled", "false");
+        props.put("spring.jpa.database-platform", "org.hibernate.dialect.PostgreSQLDialect");
+        
         String databaseUrl = System.getenv("DATABASE_URL");
         
-        // Se não tem DATABASE_URL, deixa Spring Boot usar configuração padrão
+        // Se não tem DATABASE_URL, falha explicitamente (não usa H2 como fallback)
         if (databaseUrl == null || databaseUrl.isEmpty()) {
-            logger.warn("DATABASE_URL não configurada. Verifique as variáveis de ambiente no Render.");
+            logger.error("DATABASE_URL não configurada. Configure a variável DATABASE_URL no Render.");
+            // Mesmo sem DATABASE_URL, forçamos o driver PostgreSQL para evitar uso do H2
+            env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
             return;
         }
         
         // Se já está em formato JDBC, configura direto
         if (databaseUrl.startsWith("jdbc:")) {
-            logger.info("DATABASE_URL já está no formato JDBC, configurando...");
-            ConfigurableEnvironment env = event.getEnvironment();
-            Map<String, Object> props = new HashMap<>();
+            logger.info("DATABASE_URL já está no formato JDBC, configurando PostgreSQL...");
             props.put("spring.datasource.url", databaseUrl);
             
             // Tenta usar DATABASE_USERNAME e DATABASE_PASSWORD se disponíveis
@@ -53,7 +61,7 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
             }
             
             env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
-            logger.info("Configuração do banco de dados aplicada");
+            logger.info("Configuração do PostgreSQL aplicada (formato JDBC)");
             return;
         }
         
@@ -64,8 +72,6 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
                 String jdbcUrl = convertToJdbcUrl(databaseUrl);
                 String[] credentials = extractCredentials(databaseUrl);
                 
-                ConfigurableEnvironment env = event.getEnvironment();
-                Map<String, Object> props = new HashMap<>();
                 props.put("spring.datasource.url", jdbcUrl);
                 
                 if (credentials != null && credentials[0] != null) {
@@ -76,10 +82,16 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
                 }
                 
                 env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
-                logger.info("DATABASE_URL convertida e configurada com sucesso para auto-configuração do Spring Boot");
+                logger.info("DATABASE_URL convertida e configurada com sucesso - PostgreSQL será usado");
             } catch (Exception e) {
                 logger.error("Erro ao converter DATABASE_URL: {}", e.getMessage(), e);
+                // Mesmo com erro, força PostgreSQL para evitar H2
+                env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
             }
+        } else {
+            // URL em formato desconhecido, mas força PostgreSQL
+            logger.warn("Formato de DATABASE_URL desconhecido: {}. Forçando uso do PostgreSQL.", databaseUrl);
+            env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
         }
     }
 
