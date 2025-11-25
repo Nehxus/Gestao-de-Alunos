@@ -2,61 +2,76 @@ package br.com.gestao.alunos.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
-import org.springframework.context.ApplicationListener;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.MapPropertySource;
 
+import javax.sql.DataSource;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Configuração do banco de dados para produção.
  * Converte DATABASE_URL do formato postgres:// para jdbc:postgresql://
- * e deixa Spring Boot fazer a auto-configuração automaticamente
  */
 @Configuration
 @Profile("prod")
-public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmentPreparedEvent> {
+public class DatabaseConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseConfig.class);
 
-    @Override
-    public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
+    @Bean
+    @Primary
+    @ConfigurationProperties("spring.datasource")
+    public DataSourceProperties dataSourceProperties() {
+        DataSourceProperties properties = new DataSourceProperties();
+        
         String databaseUrl = System.getenv("DATABASE_URL");
         
-        // Se não tem DATABASE_URL ou já está em formato JDBC, deixa Spring Boot fazer auto-configuração
-        if (databaseUrl == null || databaseUrl.isEmpty() || databaseUrl.startsWith("jdbc:")) {
-            logger.info("Usando auto-configuração padrão do Spring Boot");
-            return;
+        if (databaseUrl == null || databaseUrl.isEmpty()) {
+            logger.warn("DATABASE_URL não configurada");
+            return properties;
         }
         
-        // Se está no formato postgres://, converte para jdbc: e configura variáveis
+        // Se já está em formato JDBC, usa direto
+        if (databaseUrl.startsWith("jdbc:")) {
+            logger.info("DATABASE_URL já está no formato JDBC");
+            properties.setUrl(databaseUrl);
+            return properties;
+        }
+        
+        // Se está no formato postgres://, converte
         if (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://")) {
-            logger.info("Convertendo DATABASE_URL de postgres:// para formato JDBC...");
+            logger.info("Convertendo DATABASE_URL de postgres:// para JDBC...");
             try {
                 String jdbcUrl = convertToJdbcUrl(databaseUrl);
                 String[] credentials = extractCredentials(databaseUrl);
                 
-                ConfigurableEnvironment env = event.getEnvironment();
-                Map<String, Object> props = new HashMap<>();
-                props.put("spring.datasource.url", jdbcUrl);
+                properties.setUrl(jdbcUrl);
                 
-                if (credentials != null) {
-                    props.put("spring.datasource.username", credentials[0]);
-                    props.put("spring.datasource.password", credentials[1]);
+                if (credentials != null && credentials[0] != null) {
+                    properties.setUsername(credentials[0]);
+                }
+                if (credentials != null && credentials.length > 1 && credentials[1] != null) {
+                    properties.setPassword(credentials[1]);
                 }
                 
-                env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
-                logger.info("DATABASE_URL convertida e configurada para auto-configuração do Spring Boot");
+                logger.info("DATABASE_URL convertida com sucesso");
             } catch (Exception e) {
-                logger.error("Erro ao converter DATABASE_URL: {}", e.getMessage());
+                logger.error("Erro ao converter DATABASE_URL: {}", e.getMessage(), e);
             }
         }
+        
+        return properties;
+    }
+
+    @Bean
+    @Primary
+    public DataSource dataSource(DataSourceProperties properties) {
+        return properties.initializeDataSourceBuilder().build();
     }
 
     private String convertToJdbcUrl(String postgresUrl) throws URISyntaxException {
@@ -95,5 +110,5 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
             return null;
         }
     }
-
 }
+
