@@ -40,7 +40,12 @@ public class DatabaseConfig implements ApplicationListener<ApplicationEnvironmen
         // Se não tem DATABASE_URL, falha explicitamente (não usa H2 como fallback)
         if (databaseUrl == null || databaseUrl.isEmpty()) {
             logger.error("DATABASE_URL não configurada. Configure a variável DATABASE_URL no Render.");
-            // Mesmo sem DATABASE_URL, forçamos o driver PostgreSQL para evitar uso do H2
+            logger.error("A aplicação NÃO usará H2 em produção. Configure DATABASE_URL para continuar.");
+            // Define uma URL inválida para forçar erro de PostgreSQL (não H2)
+            // Isso garante que o Spring Boot não tente usar H2 como fallback
+            props.put("spring.datasource.url", "jdbc:postgresql://localhost:5432/INVALID_DATABASE_URL_NOT_CONFIGURED");
+            props.put("spring.datasource.username", "INVALID");
+            props.put("spring.datasource.password", "INVALID");
             env.getPropertySources().addFirst(new MapPropertySource("databaseConfig", props));
             return;
         }
